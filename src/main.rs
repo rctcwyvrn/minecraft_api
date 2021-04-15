@@ -131,7 +131,7 @@ fn server_manager(send_res: Sender<String>, recv_cmd: Receiver<String>) {
 
     loop {
         // Flush
-        let mut c = Some('\0');
+        let mut c = server_child.try_read();
         while let Some(_) = c {
             print!("{}", c.unwrap());
             c = server_child.try_read();
