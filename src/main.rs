@@ -29,7 +29,7 @@ async fn main() {
 }
 
 async fn list_players((send_cmd, recv_res): (Sender<String>, Receiver<String>)) ->  Result<impl warp::Reply, warp::Rejection> {
-    if let Err(e) = send_cmd.send("/listd".to_string()) {
+    if let Err(e) = send_cmd.send("/list uuids".to_string()) {
         panic!("send_cmd channel broken | {:?}", e);
     }
 
