@@ -2,9 +2,13 @@ use warp::{Filter};
 use std::thread;
 use crossbeam_channel::{Sender, Receiver, unbounded};
 use std::time::Duration;
+extern crate pretty_env_logger;
+#[macro_use] extern crate log;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 async fn main() {
+    pretty_env_logger::init();
+
     let (send_cmd, recv_cmd) = unbounded();
     let (send_res, recv_res) = unbounded();
     thread::spawn(move || server_manager(send_res, recv_cmd));
@@ -22,7 +26,7 @@ async fn main() {
     
     
     let routes = list_players.or(send_msg);
-    println!("Starting server API");
+    info!("Starting server API");
     warp::serve(routes)
         .bind(([0,0,0,0], 5000))
         .await;
@@ -30,7 +34,8 @@ async fn main() {
 
 async fn list_players((send_cmd, recv_res): (Sender<String>, Receiver<String>)) ->  Result<impl warp::Reply, warp::Rejection> {
     if let Err(e) = send_cmd.send("/list uuids".to_string()) {
-        panic!("send_cmd channel broken | {:?}", e);
+        error!("send_cmd channel broken | {:?}", e);
+        panic!();
     }
 
     let res = recv_res.recv_timeout(Duration::from_secs(5));
@@ -55,7 +60,8 @@ async fn send_msg((msg, send_cmd, recv_res): (String, Sender<String>, Receiver<S
     }
 
     if let Err(e) = send_cmd.send(format!("/say [API] {}", msg)) {
-        panic!("send_cmd channel broken | {:?}", e);
+        error!("send_cmd channel broken | {:?}", e);
+        panic!();
     }
 
     let res = recv_res.recv_timeout(Duration::from_secs(5));
@@ -73,21 +79,24 @@ fn server_manager(send_res: Sender<String>, recv_cmd: Receiver<String>) {
 
     let server_child = rexpect::spawn("/home/server/start_server.sh", Some(2000));
     if let Err(e) = server_child {
-        panic!("Failed to spawn server, exiting | {:?}", e);
+        error!("Failed to spawn server, exiting | {:?}", e);
+        panic!();
     }
     let mut server_child = server_child.unwrap();
 
     let send_ch = | msg: String | {
         let res = send_res.send(msg);
         if let Err(e) = res {
-            panic!("Send_res channel broken | {:?}", e);
+            error!("Send_res channel broken | {:?}", e);
+            panic!();
         }
     };
 
     loop {
         let cmd = recv_cmd.recv();
         if let Err(e) = cmd {
-            panic!("Recv_cmd channel broken | {:?}", e);
+            error!("Recv_cmd channel broken | {:?}", e);
+            panic!();
         }
         let cmd = cmd.unwrap();
 
