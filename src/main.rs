@@ -48,8 +48,12 @@ async fn send_msg((msg, send_cmd, recv_res): (String, Sender<String>, Receiver<S
     if let Err(_) = res {
         return Err(warp::reject::reject());
     }
-    let msg = res.unwrap();
     
+    let msg = res.unwrap();
+    if msg.contains("\n") {
+        return Err(warp::reject::reject());
+    }
+
     if let Err(e) = send_cmd.send(format!("/say [API] {}", msg)) {
         panic!("send_cmd channel broken | {:?}", e);
     }
