@@ -44,13 +44,19 @@ async fn list_players((send_cmd, recv_res): (Sender<String>, Receiver<String>)) 
 }
 
 async fn send_msg((msg, send_cmd, recv_res): (String, Sender<String>, Receiver<String>)) ->  Result<impl warp::Reply, warp::Rejection> {
+    let res = urlencoding::decode(&msg);
+    if let Err(_) = res {
+        return Err(warp::reject::reject());
+    }
+    let msg = res.unwrap();
+    
     if let Err(e) = send_cmd.send(format!("/say [API] {}", msg)) {
         panic!("send_cmd channel broken | {:?}", e);
     }
 
     let res = recv_res.recv_timeout(Duration::from_secs(5));
     match res {
-        Ok(_) => Ok(warp::reply::json(&"Sent message".to_string())),
+        Ok(_) => Ok(warp::reply::json(&format!("Sent message: '{}'", msg))),
         Err(e) => {
             let err_str = format!("{:?}",e);
             Ok(warp::reply::json(&err_str))
