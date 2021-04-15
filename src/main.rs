@@ -35,7 +35,13 @@ async fn main() {
         .and_then(send_msg)
         .with(log);
 
-    let routes = list_players.or(send_msg);
+    let (s, r) = (send_cmd.clone(), recv_res.clone());
+    let whisper_msg = warp::path!("tell" / String / String)
+        .map(move |target: String, msg: String| (target, msg, s.clone(), r.clone()))
+        .and_then(whisper)
+        .with(log);
+
+    let routes = list_players.or(send_msg).or(whisper_msg);
     info!("Starting server API");
     warp::serve(routes).bind(([0, 0, 0, 0], 5000)).await;
 }
@@ -79,6 +85,37 @@ async fn send_msg(
     let res = recv_res.recv_timeout(Duration::from_secs(5));
     match res {
         Ok(_) => Ok(warp::reply::json(&format!("Sent message: '{}'", msg))),
+        Err(e) => {
+            let err_str = format!("{:?}", e);
+            Ok(warp::reply::json(&err_str))
+        }
+    }
+}
+
+async fn whisper(
+    (target, msg, send_cmd, recv_res): (String, String, Sender<String>, Receiver<String>),
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let res = urlencoding::decode(&msg);
+    if let Err(_) = res {
+        return Err(warp::reject::reject());
+    }
+
+    let msg = res.unwrap();
+    if msg.contains("\n") {
+        return Err(warp::reject::reject());
+    }
+
+    if let Err(e) = send_cmd.send(format!("/tell {} {}", target, msg)) {
+        error!("send_cmd channel broken | {:?}", e);
+        panic!();
+    }
+
+    let res = recv_res.recv_timeout(Duration::from_secs(5));
+    match res {
+        Ok(_) => Ok(warp::reply::json(&format!(
+            "Sent whisper '{}' to '{}'",
+            msg, target
+        ))),
         Err(e) => {
             let err_str = format!("{:?}", e);
             Ok(warp::reply::json(&err_str))
