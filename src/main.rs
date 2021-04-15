@@ -1,7 +1,8 @@
 use warp::{Filter};
-use std::thread;
-use crossbeam_channel::{Sender, Receiver, unbounded};
-use std::time::Duration;
+use crossbeam_channel::{Receiver, Sender, TryRecvError, unbounded};
+use std::{thread, time::Duration};
+use rustyline::error::ReadlineError;
+use rustyline::Editor;
 extern crate pretty_env_logger;
 #[macro_use] extern crate log;
 
@@ -12,7 +13,13 @@ async fn main() {
 
     let (send_cmd, recv_cmd) = unbounded();
     let (send_res, recv_res) = unbounded();
-    thread::spawn(move || server_manager(send_res, recv_cmd));
+
+    let (s,r) = (send_res.clone(), recv_cmd.clone());
+    thread::spawn(move || server_manager(s,r));
+
+    let s= send_cmd.clone();
+    // thread::spawn(move || admin_console(send_res, recv_cmd, io::stdin().as_raw_fd()));
+    thread::spawn(move || admin_console(s));
 
     let (s,r) = (send_cmd.clone(), recv_res.clone());
     let list_players = warp::get()
@@ -77,10 +84,33 @@ async fn send_msg((msg, send_cmd, recv_res): (String, Sender<String>, Receiver<S
     }
 }
 
+fn admin_console(send_cmd: Sender<String>) {
+    let mut rl = Editor::<()>::new();
+    loop {
+        let readline = rl.readline(">> ");
+        match readline {
+            Ok(line) => {
+                rl.add_history_entry(line.as_str());
+                send_cmd.send(line);
+                thread::sleep(Duration::from_secs(1));
+            },
+            Err(ReadlineError::Interrupted) => {
+                error!("Killing shit");
+                send_cmd.send("<KILL>".to_string());
+                return;
+            },
+            Err(err) => {
+                error!("Error: {:?}", err);
+            }
+        }
+    }
+}
+
 fn server_manager(send_res: Sender<String>, recv_cmd: Receiver<String>) {
-    println!("Starting server");
+    info!("Starting server");
 
     let server_child = rexpect::spawn("/home/server/start_server.sh", Some(2000));
+    // let server_child = rexpect::spawn("cat", Some(2000));
     if let Err(e) = server_child {
         error!("Failed to spawn server, exiting | {:?}", e);
         panic!();
@@ -88,6 +118,7 @@ fn server_manager(send_res: Sender<String>, recv_cmd: Receiver<String>) {
     let mut server_child = server_child.unwrap();
 
     let send_ch = | msg: String | {
+        info!("Returning '{}'", msg);
         let res = send_res.send(msg);
         if let Err(e) = res {
             error!("Send_res channel broken | {:?}", e);
@@ -96,19 +127,33 @@ fn server_manager(send_res: Sender<String>, recv_cmd: Receiver<String>) {
     };
 
     loop {
-        let cmd = recv_cmd.recv();
-        if let Err(e) = cmd {
-            error!("Recv_cmd channel broken | {:?}", e);
-            panic!();
-        }
-        let cmd = cmd.unwrap();
-
         // Flush
-        let mut c = Some('c');
+        let mut c = Some('\0');
         while let Some(_) = c {
+            print!("{}", c.unwrap());
             c = server_child.try_read();
         }
 
+        let cmd = recv_cmd.try_recv();
+        match cmd {
+            Ok(_) => {}
+            Err(TryRecvError::Empty) => {
+                thread::sleep(Duration::from_secs(1));
+                continue
+            }
+            Err(TryRecvError::Disconnected) => {
+                error!("Recv_cmd channel broken");
+                panic!();
+            }
+        }
+        let cmd = cmd.unwrap();
+        if cmd.eq("<KILL>") {
+            server_child.send_control('c');
+            thread::sleep(Duration::from_secs(10));
+            panic!("Stopping!");
+        }
+
+        info!("Executing '{}'", cmd);
         if let Err(e) = server_child.send_line(&cmd) {
             send_ch(format!("Got error when sending to server: {:?}", e));
         }
