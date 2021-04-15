@@ -8,6 +8,7 @@ extern crate pretty_env_logger;
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 async fn main() {
     pretty_env_logger::init();
+    let log = warp::log("log::info");
 
     let (send_cmd, recv_cmd) = unbounded();
     let (send_res, recv_res) = unbounded();
@@ -17,12 +18,14 @@ async fn main() {
     let list_players = warp::get()
         .and(warp::path("list"))
         .map(move || (s.clone(), r.clone()))
-        .and_then(list_players);
+        .and_then(list_players)
+        .with(log);
     
     let (s,r) = (send_cmd.clone(), recv_res.clone());
     let send_msg = warp::path!("say" / String)
         .map(move |item| (item, s.clone(), r.clone()))
-        .and_then(send_msg);
+        .and_then(send_msg)
+        .with(log);
     
     
     let routes = list_players.or(send_msg);
