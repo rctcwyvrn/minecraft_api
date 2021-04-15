@@ -40,7 +40,7 @@ async fn list_players((send_cmd, recv_res): (Sender<String>, Receiver<String>)) 
 fn server_manager(send_res: Sender<String>, recv_cmd: Receiver<String>) {
     println!("Starting server");
 
-    let server_child = rexpect::spawn("cat", Some(2000));
+    let server_child = rexpect::spawn("/home/server/start_server.sh", Some(2000));
     if let Err(e) = server_child {
         panic!("Failed to spawn server, exiting | {:?}", e);
     }
