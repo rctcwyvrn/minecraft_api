@@ -18,7 +18,7 @@ async fn main() {
     let routes = list_players;
     println!("Starting server API");
     warp::serve(routes)
-        .bind(([127,0,0,1], 5000))
+        .bind(([0,0,0,0], 5000))
         .await;
 }
 
@@ -67,13 +67,13 @@ fn server_manager(send_res: Sender<String>, recv_cmd: Receiver<String>) {
         }
 
         if let Err(e) = server_child.send_line(&cmd) {
-            send_ch(format!("Got error when communicating with server: {:?}", e));
+            send_ch(format!("Got error when sending to server: {:?}", e));
         }
 
         let res = server_child.read_line();
         match res {
             Ok(res) => send_ch(res),
-            Err(e) => send_ch(format!("Got error when communicating with server: {:?}", e)),
+            Err(e) => send_ch(format!("Got error when receiving from server: {:?}", e)),
         };
     }
 }
