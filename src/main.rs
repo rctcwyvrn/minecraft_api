@@ -9,13 +9,19 @@ async fn main() {
     let (send_res, recv_res) = unbounded();
     thread::spawn(move || server_manager(send_res, recv_cmd));
 
+    let (s,r) = (send_cmd.clone(), recv_res.clone());
     let list_players = warp::get()
         .and(warp::path("list"))
-        .map(move || (send_cmd.clone(), recv_res.clone()))
+        .map(move || (s.clone(), r.clone()))
         .and_then(list_players);
     
+    let (s,r) = (send_cmd.clone(), recv_res.clone());
+    let send_msg = warp::path!("say" / String)
+        .map(move |item| (item, s.clone(), r.clone()))
+        .and_then(send_msg);
     
-    let routes = list_players;
+    
+    let routes = list_players.or(send_msg);
     println!("Starting server API");
     warp::serve(routes)
         .bind(([0,0,0,0], 5000))
@@ -23,13 +29,28 @@ async fn main() {
 }
 
 async fn list_players((send_cmd, recv_res): (Sender<String>, Receiver<String>)) ->  Result<impl warp::Reply, warp::Rejection> {
-    if let Err(e) = send_cmd.send("/list".to_string()) {
+    if let Err(e) = send_cmd.send("/listd".to_string()) {
         panic!("send_cmd channel broken | {:?}", e);
     }
 
     let res = recv_res.recv_timeout(Duration::from_secs(5));
     match res {
         Ok(r) => Ok(warp::reply::json(&r)),
+        Err(e) => {
+            let err_str = format!("{:?}",e);
+            Ok(warp::reply::json(&err_str))
+        }
+    }
+}
+
+async fn send_msg((msg, send_cmd, recv_res): (String, Sender<String>, Receiver<String>)) ->  Result<impl warp::Reply, warp::Rejection> {
+    if let Err(e) = send_cmd.send(format!("/say [API] {}", msg)) {
+        panic!("send_cmd channel broken | {:?}", e);
+    }
+
+    let res = recv_res.recv_timeout(Duration::from_secs(5));
+    match res {
+        Ok(_) => Ok(warp::reply::json(&"Sent message".to_string())),
         Err(e) => {
             let err_str = format!("{:?}",e);
             Ok(warp::reply::json(&err_str))
