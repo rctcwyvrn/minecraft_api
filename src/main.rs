@@ -56,7 +56,10 @@ async fn list_players(
 
     let res = recv_res.recv_timeout(Duration::from_secs(5));
     match res {
-        Ok(r) => Ok(warp::reply::json(&r)),
+        Ok(mut r) => {
+            nom(&mut r);
+            Ok(warp::reply::json(&r))
+        }
         Err(e) => {
             let err_str = format!("{:?}", e);
             Ok(warp::reply::json(&err_str))
@@ -84,11 +87,19 @@ async fn send_msg(
 
     let res = recv_res.recv_timeout(Duration::from_secs(5));
     match res {
-        Ok(r) => Ok(warp::reply::json(&format!("{}", r))),
+        Ok(_) => Ok(warp::reply::json(&format!("Sent message: '{}'", msg))),
         Err(e) => {
             let err_str = format!("{:?}", e);
             Ok(warp::reply::json(&err_str))
         }
+    }
+}
+
+fn nom(s: &mut String) {
+    let server_str = "[minecraft/DedicatedServer]: ";
+    let offset = s.find(server_str);
+    if let Some(idx) = offset {
+        s.replace_range(..(idx + server_str.len()), "");
     }
 }
 
@@ -112,7 +123,10 @@ async fn whisper(
 
     let res = recv_res.recv_timeout(Duration::from_secs(5));
     match res {
-        Ok(r) => Ok(warp::reply::json(&format!("{}", r))),
+        Ok(mut r) => {
+            nom(&mut r);
+            Ok(warp::reply::json(&format!("{}", r)))
+        }
         Err(e) => {
             let err_str = format!("{:?}", e);
             Ok(warp::reply::json(&err_str))
