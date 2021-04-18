@@ -84,7 +84,7 @@ async fn send_msg(
 
     let res = recv_res.recv_timeout(Duration::from_secs(5));
     match res {
-        Ok(_) => Ok(warp::reply::json(&format!("Sent message: '{}'", msg))),
+        Ok(r) => Ok(warp::reply::json(&format!("{}", r))),
         Err(e) => {
             let err_str = format!("{:?}", e);
             Ok(warp::reply::json(&err_str))
@@ -112,10 +112,7 @@ async fn whisper(
 
     let res = recv_res.recv_timeout(Duration::from_secs(5));
     match res {
-        Ok(_) => Ok(warp::reply::json(&format!(
-            "Sent whisper '{}' to '{}'",
-            msg, target
-        ))),
+        Ok(r) => Ok(warp::reply::json(&format!("{}", r))),
         Err(e) => {
             let err_str = format!("{:?}", e);
             Ok(warp::reply::json(&err_str))
@@ -158,7 +155,6 @@ fn server_manager(send_res: Sender<String>, recv_cmd: Receiver<String>) {
     let mut server_child = server_child.unwrap();
 
     let send_ch = |msg: String| {
-        info!("Returning '{}'", msg);
         let res = send_res.send(msg);
         if let Err(e) = res {
             error!("Send_res channel broken | {:?}", e);
@@ -201,6 +197,7 @@ fn server_manager(send_res: Sender<String>, recv_cmd: Receiver<String>) {
         }
 
         let res = server_child.read_line();
+        info!("Returning '{:?}'", res);
         match res {
             Ok(res) => send_ch(res),
             Err(e) => send_ch(format!("Got error when receiving from server: {:?}", e)),
